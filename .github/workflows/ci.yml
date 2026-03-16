@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package (no dependencies)
+        run: pip install -e .
+
+      - name: Install test extras
+        run: pip install pytest pyyaml
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+      - name: Check zero-dependency core import
+        run: python -c "from digital_pedon import build_pedon; print('Core import OK')"

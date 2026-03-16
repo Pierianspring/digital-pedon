@@ -1,0 +1,125 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Digital Pedon — Sensor Manifest Template
+# Copy this file, fill in your own values, and load with:
+#   manifest = SensorManifest.from_yaml("sensors_example.yaml")
+# ─────────────────────────────────────────────────────────────────────────────
+
+site_name: My Field Site
+pedon_id:  SITE_001
+
+fields:
+
+  # ── In-situ: Ap horizon ───────────────────────────────────────────────────
+  - source_key:      VWC_15cm_pct       # column name in your logger CSV
+    canonical_key:   volumetric_water_content
+    unit:            "%"               # supported: %, cm3/cm3, m3/m3
+    horizon_id:      Ap
+    depth_cm:        15
+    sampling_rate_s: 3600              # hourly
+    sensor_type:     METER TEROS 11
+    data_origin:     in_situ
+    description:     Ap horizon TDR probe, installed 2025-03-01
+
+  - source_key:      Temp_15cm_F
+    canonical_key:   soil_temperature_c
+    unit:            degF              # supported: degC, degF, K
+    horizon_id:      Ap
+    depth_cm:        15
+    sampling_rate_s: 3600
+    sensor_type:     METER TEROS 11
+    data_origin:     in_situ
+
+  - source_key:      EC_15cm_uScm
+    canonical_key:   electrical_conductivity_ds_m
+    unit:            "μS/cm"           # supported: dS/m, mS/cm, mS/m, μS/cm
+    horizon_id:      Ap
+    depth_cm:        15
+    sampling_rate_s: 3600
+    sensor_type:     METER TEROS 11
+    data_origin:     in_situ
+
+  # ── In-situ: Bw horizon ───────────────────────────────────────────────────
+  - source_key:      VWC_45cm_m3m3
+    canonical_key:   volumetric_water_content
+    unit:            m3/m3
+    horizon_id:      Bw
+    depth_cm:        45
+    sampling_rate_s: 3600
+    sensor_type:     Sentek Drill & Drop
+    data_origin:     in_situ
+
+  - source_key:      Temp_45cm_C
+    canonical_key:   soil_temperature_c
+    unit:            degC
+    horizon_id:      Bw
+    depth_cm:        45
+    sampling_rate_s: 3600
+    sensor_type:     Sentek Drill & Drop
+    data_origin:     in_situ
+
+  # ── Tensiometer (manual read, kPa → cm H₂O auto-converted) ───────────────
+  - source_key:      Tension_90cm_kPa
+    canonical_key:   matric_potential_cm
+    unit:            kPa               # supported: cm_H2O, kPa, hPa, bar, pF, MPa
+    horizon_id:      C
+    depth_cm:        90
+    sampling_rate_s: 604800            # weekly
+    sensor_type:     Jet-fill tensiometer
+    data_origin:     manual
+    optional:        true              # absent readings are silently skipped
+
+  # ── Remote sensing: Sentinel-2 NDVI (user extracts pixel value) ──────────
+  - source_key:      NDVI_S2
+    canonical_key:   ndvi
+    unit:            dimensionless
+    horizon_id:      Ap
+    depth_cm:        0
+    sampling_rate_s: 864000            # ~10 days (Sentinel-2 revisit)
+    sensor_type:     Sentinel-2 MSI Band 4/8 ratio
+    data_origin:     remote_sensing
+    description:     Cloud-masked L2A pixel extracted at field centroid
+    optional:        true
+
+  # ── Remote sensing: Sentinel-2 NIR band as DN (auto-scaled to reflectance)
+  - source_key:      B8_DN
+    canonical_key:   surface_reflectance_nir
+    unit:            DN                # auto-divided by 10000 → reflectance
+    horizon_id:      Ap
+    depth_cm:        0
+    sampling_rate_s: 864000
+    sensor_type:     Sentinel-2 MSI Band 8 NIR
+    data_origin:     remote_sensing
+    optional:        true
+
+  # ── Remote sensing: Sentinel-1 SAR soil moisture index ───────────────────
+  - source_key:      SMI_S1
+    canonical_key:   soil_moisture_index
+    unit:            dimensionless
+    horizon_id:      Ap
+    depth_cm:        0
+    sampling_rate_s: 432000            # ~5 days
+    sensor_type:     Sentinel-1 SAR VV/VH derived SMI
+    data_origin:     remote_sensing
+    optional:        true
+
+  # ── Remote sensing: Landsat 8 LST ─────────────────────────────────────────
+  - source_key:      LST_C
+    canonical_key:   land_surface_temperature_c
+    unit:            degC
+    horizon_id:      Ap
+    depth_cm:        0
+    sampling_rate_s: 1382400           # ~16 days
+    sensor_type:     Landsat 8 Band 10 TIRS
+    data_origin:     remote_sensing
+    optional:        true
+
+  # ── Remote sensing: MODIS ET ──────────────────────────────────────────────
+  - source_key:      ET_mm_day
+    canonical_key:   evapotranspiration_mm_day
+    unit:            mm/day
+    horizon_id:      Ap
+    depth_cm:        0
+    sampling_rate_s: 691200            # 8-day composite
+    sensor_type:     MOD16A2 MODIS 500m
+    data_origin:     remote_sensing
+    optional:        true

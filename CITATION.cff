@@ -1,0 +1,49 @@
+cff-version: 1.2.0
+message: "If you use Digital Pedon in your research, please cite it as below."
+type: software
+title: "Digital Pedon: A Digital Twin Framework for Soil Profile Monitoring, Physics-Based Inference, and Global Interoperability"
+version: "2.0"
+date-released: "2026-01-01"
+license: CC-BY-4.0
+repository-code: "https://github.com/digitalpedon/framework"
+url: "https://github.com/digitalpedon/framework"
+authors:
+  - family-names: Badreldin
+    given-names: Nasem
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+  - family-names: Youssef
+    given-names: Ali
+    orcid: "https://orcid.org/0000-0000-0000-0001"
+keywords:
+  - soil science
+  - digital twin
+  - soil physics
+  - van genuchten
+  - soil monitoring
+  - GLOSIS
+  - soil hydrology
+  - remote sensing
+  - LLM agent
+abstract: >
+  Digital Pedon is a dictionary-first, stdlib-only Python framework implementing
+  a three-layer digital twin for soil profiles. It ingests sensor and remote
+  sensing data through a declarative BYOD manifest, runs physics-based solvers
+  (Van Genuchten, Darcy-Buckingham, De Vries heat equation, Q10 respiration),
+  fires configurable threshold alarms, and stores a time-series history — all
+  operating on plain Python dicts with no external dependencies. The framework
+  is GLOSIS-compliant and exports JSON-LD for submission to FAO, ESDAC, and
+  any OGC-compliant soil information system. An LLM-readable JSON-LD context
+  manifest and OpenAI-compatible tool schema enable LLM agents to call
+  Digital Pedon methods as native tools.
+preferred-citation:
+  type: software
+  authors:
+    - family-names: Badreldin
+      given-names: Nasem
+    - family-names: Youssef
+      given-names: Ali
+  title: "Digital Pedon: A Digital Twin Framework for Soil Profile Monitoring, Physics-Based Inference, and Global Interoperability"
+  year: 2026
+  version: "2.0"
+  license: CC-BY-4.0
+  url: "https://github.com/digitalpedon/framework"

@@ -1,0 +1,411 @@
+{
+  "_meta": {
+    "name":        "Digital Pedon Tool Schema",
+    "version":     "2.0",
+    "authors":     ["Badreldin, N.", "Youssef, A."],
+    "year":        2026,
+    "license":     "CC BY 4.0",
+    "repository":  "https://github.com/digitalpedon/framework",
+    "description": "OpenAI-compatible function-call schema for all public Digital Pedon methods. Paste this schema into any LLM agent (Claude, GPT-4o, Gemini) to enable it to call Digital Pedon as a set of native tools. The LLM generates structured JSON tool calls; a thin Python dispatcher (see dp_agent.py) executes them against a live DigitalPedon instance.",
+    "format":      "OpenAI tools array (compatible with Anthropic tool_use, Google Gemini function declarations)",
+    "usage":       "Pass the 'tools' array below as the tools parameter in your LLM API call."
+  },
+
+  "tools": [
+
+    {
+      "type": "function",
+      "function": {
+        "name":        "dp_build_pedon",
+        "description": "Build a Digital Pedon (soil profile digital twin) from a configuration dict. Call this once at the start of a session. Returns a pedon_id that must be used in all subsequent calls.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "site_name": {
+              "type":        "string",
+              "description": "Human-readable name of the field site, e.g. 'North Field, Flanders'"
+            },
+            "pedon_id": {
+              "type":        "string",
+              "description": "Optional unique identifier. Auto-generated UUID if absent."
+            },
+            "latitude": {
+              "type":        "number",
+              "description": "WGS84 decimal degrees latitude of the site."
+            },
+            "longitude": {
+              "type":        "number",
+              "description": "WGS84 decimal degrees longitude of the site."
+            },
+            "thresholds": {
+              "type":        "object",
+              "description": "Optional alarm thresholds. Any omitted key uses the default.",
+              "properties": {
+                "theta_saturation": { "type": "number", "description": "Saturation water content [cm3/cm3]. Default: 0.44" },
+                "theta_wilting_pt": { "type": "number", "description": "Wilting point water content [cm3/cm3]. Default: 0.10" },
+                "temp_high_c":      { "type": "number", "description": "High temperature alarm [°C]. Default: 35.0" },
+                "temp_low_c":       { "type": "number", "description": "Low temperature alarm [°C]. Default: 2.0" },
+                "ec_high_ds_m":     { "type": "number", "description": "High EC alarm [dS/m]. Default: 4.0" }
+              }
+            },
+            "horizons": {
+              "type":        "array",
+              "description": "List of soil horizons, ordered by depth. At least one required.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "designation":      { "type": "string", "description": "FAO horizon designation, e.g. 'Ap', 'Bw', 'Btg', 'C'" },
+                  "depth_top_cm":     { "type": "number", "description": "Top of horizon [cm from surface]. 0 for first horizon." },
+                  "depth_bottom_cm":  { "type": "number", "description": "Bottom of horizon [cm from surface]." },
+                  "soil_type":        { "type": "string", "description": "Optional: name of a registered soil type (loamy_topsoil, clay_subsoil, sandy_loam, peat, calcareous_loam). Provides default VG parameters." },
+                  "clay_pct":         { "type": "number", "description": "Clay content [%]" },
+                  "silt_pct":         { "type": "number", "description": "Silt content [%]" },
+                  "sand_pct":         { "type": "number", "description": "Sand content [%]" },
+                  "organic_carbon_pct": { "type": "number", "description": "Organic carbon [%]" },
+                  "bulk_density_g_cm3": { "type": "number", "description": "Bulk density [g/cm3]" },
+                  "theta_r":          { "type": "number", "description": "Van Genuchten residual water content [cm3/cm3]" },
+                  "theta_s":          { "type": "number", "description": "Van Genuchten saturated water content [cm3/cm3]" },
+                  "alpha_vg":         { "type": "number", "description": "Van Genuchten alpha parameter [1/cm]" },
+                  "n_vg":             { "type": "number", "description": "Van Genuchten n parameter [-]" },
+                  "Ks_cm_day":        { "type": "number", "description": "Saturated hydraulic conductivity [cm/day]" }
+                },
+                "required": ["designation", "depth_top_cm", "depth_bottom_cm"]
+              }
+            }
+          },
+          "required": ["horizons"]
+        }
+      }
+    },
+
+    {
+      "type": "function",
+      "function": {
+        "name":        "dp_update",
+        "description": "Ingest one sensor reading into the Digital Pedon and run all physics solvers. Returns the updated horizon state including matric potential, hydraulic conductivity, Darcy flux, and all custom solver outputs. This is the main operation — call it once per sensor reading.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "pedon_id": {
+              "type":        "string",
+              "description": "The pedon_id returned by dp_build_pedon."
+            },
+            "horizon_id": {
+              "type":        "string",
+              "description": "Horizon identifier matching one of the horizons in this pedon, e.g. 'Ap', 'Bw'."
+            },
+            "volumetric_water_content": {
+              "type":        "number",
+              "description": "Volumetric soil water content [cm3/cm3]. Must be between theta_r and theta_s."
+            },
+            "soil_temperature_c": {
+              "type":        "number",
+              "description": "Soil temperature [°C]."
+            },
+            "electrical_conductivity_ds_m": {
+              "type":        "number",
+              "description": "Electrical conductivity [dS/m]. Optional — used for salinity alarm only."
+            },
+            "timestamp": {
+              "type":        "number",
+              "description": "Unix epoch timestamp. Auto-set to current time if absent."
+            },
+            "ndvi": {
+              "type":        "number",
+              "description": "Optional: NDVI from remote sensing [-1, 1]."
+            },
+            "land_surface_temperature_c": {
+              "type":        "number",
+              "description": "Optional: land surface temperature from thermal RS [°C]."
+            },
+            "soil_moisture_index": {
+              "type":        "number",
+              "description": "Optional: remote sensing soil moisture index [0–1]."
+            },
+            "precipitation_mm": {
+              "type":        "number",
+              "description": "Optional: precipitation since last reading [mm]."
+            }
+          },
+          "required": ["pedon_id", "horizon_id", "volumetric_water_content", "soil_temperature_c"]
+        }
+      }
+    },
+
+    {
+      "type": "function",
+      "function": {
+        "name":        "dp_snapshot",
+        "description": "Return the full current state of all horizons in the Digital Pedon. Use this to inspect the current condition of the entire soil profile — all water contents, temperatures, matric potentials, and derived quantities.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "pedon_id": {
+              "type":        "string",
+              "description": "The pedon_id returned by dp_build_pedon."
+            },
+            "horizon_id": {
+              "type":        "string",
+              "description": "Optional: if provided, return state for this horizon only."
+            }
+          },
+          "required": ["pedon_id"]
+        }
+      }
+    },
+
+    {
+      "type": "function",
+      "function": {
+        "name":        "dp_query_history",
+        "description": "Retrieve the time-series history of sensor readings and derived values for one horizon. Returns a list of dicts ordered by timestamp. Use this to analyse trends, compute statistics, or export data.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "pedon_id": {
+              "type":        "string",
+              "description": "The pedon_id returned by dp_build_pedon."
+            },
+            "horizon_id": {
+              "type":        "string",
+              "description": "Horizon to query, e.g. 'Ap'."
+            },
+            "since": {
+              "type":        "number",
+              "description": "Optional: Unix timestamp — return records at or after this time."
+            },
+            "until": {
+              "type":        "number",
+              "description": "Optional: Unix timestamp — return records at or before this time."
+            },
+            "limit": {
+              "type":        "integer",
+              "description": "Optional: maximum number of records to return (most recent). 0 = all."
+            }
+          },
+          "required": ["pedon_id", "horizon_id"]
+        }
+      }
+    },
+
+    {
+      "type": "function",
+      "function": {
+        "name":        "dp_register_sensor_manifest",
+        "description": "Register a sensor manifest for a pedon. Declares what each field in incoming raw data means — its canonical property, unit, depth, sensor type, and data origin (in_situ or remote_sensing). After registering, call dp_ingest_raw to normalise raw data automatically.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "pedon_id": {
+              "type":        "string",
+              "description": "The pedon_id this manifest belongs to."
+            },
+            "site_name": {
+              "type":        "string",
+              "description": "Optional site name (for documentation)."
+            },
+            "fields": {
+              "type":        "array",
+              "description": "List of sensor field declarations.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "source_key": {
+                    "type":        "string",
+                    "description": "The key/column name as it appears in your raw data, e.g. 'VWC_Ap_pct'."
+                  },
+                  "canonical_key": {
+                    "type":        "string",
+                    "description": "Which DP property this maps to. Must be a canonical key or alias from CANONICAL_PROPERTIES. E.g. 'volumetric_water_content', 'soil_temperature_c', 'ndvi', 'land_surface_temperature_c'.",
+                    "enum": [
+                      "volumetric_water_content", "matric_potential_cm",
+                      "soil_temperature_c", "electrical_conductivity_ds_m",
+                      "bulk_dielectric_permittivity", "ndvi",
+                      "land_surface_temperature_c", "soil_moisture_index",
+                      "surface_reflectance_nir", "surface_reflectance_swir1",
+                      "evapotranspiration_mm_day", "precipitation_mm",
+                      "redox_potential_mv", "ph", "co2_concentration_ppm"
+                    ]
+                  },
+                  "unit": {
+                    "type":        "string",
+                    "description": "Unit of the incoming value. Supported: cm3/cm3, %, m3/m3, degC, degF, K, dS/m, mS/cm, μS/cm, cm_H2O, kPa, hPa, bar, pF, MPa, mm, dimensionless, DN, ppm, mV."
+                  },
+                  "horizon_id": {
+                    "type":        "string",
+                    "description": "Which horizon this reading belongs to, e.g. 'Ap'."
+                  },
+                  "depth_cm": {
+                    "type":        "number",
+                    "description": "Sensor installation depth below surface [cm]."
+                  },
+                  "sampling_rate_s": {
+                    "type":        "number",
+                    "description": "Nominal measurement interval [seconds]. 3600 = hourly. For RS: 864000 = 10 days."
+                  },
+                  "sensor_type": {
+                    "type":        "string",
+                    "description": "Free text, e.g. 'METER TEROS 11', 'Sentinel-2 MSI', 'Landsat 8 Band 10'."
+                  },
+                  "data_origin": {
+                    "type":        "string",
+                    "enum":        ["in_situ", "remote_sensing", "manual"],
+                    "description": "Origin of this data field."
+                  },
+                  "description": {
+                    "type":        "string",
+                    "description": "Optional free-text note about this sensor or field."
+                  },
+                  "optional": {
+                    "type":        "boolean",
+                    "description": "If true, a missing field in a raw reading is silently skipped. Default: false."
+                  }
+                },
+                "required": ["source_key", "canonical_key", "unit", "horizon_id"]
+              }
+            }
+          },
+          "required": ["pedon_id", "fields"]
+        }
+      }
+    },
+
+    {
+      "type": "function",
+      "function": {
+        "name":        "dp_ingest_raw",
+        "description": "Ingest a raw data dict through the registered sensor manifest. The layer validates values, converts units to SI, renames keys to canonical DP vocabulary, and returns normalised readings ready for dp_update. If the raw dict spans multiple horizons, returns one reading per horizon.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "pedon_id": {
+              "type":        "string",
+              "description": "The pedon_id (must have a registered manifest)."
+            },
+            "raw": {
+              "type":        "object",
+              "description": "Raw data dict with source keys and original units, e.g. {VWC_Ap_pct: 28.5, Temp_Ap_F: 59.4, NDVI_S2: 0.61}.",
+              "additionalProperties": true
+            },
+            "timestamp": {
+              "type":        "number",
+              "description": "Optional Unix timestamp. Defaults to current time."
+            },
+            "split_by_horizon": {
+              "type":        "boolean",
+              "description": "If true, split the result into one dict per horizon (use for multi-depth CSV rows). Default: false."
+            }
+          },
+          "required": ["pedon_id", "raw"]
+        }
+      }
+    },
+
+    {
+      "type": "function",
+      "function": {
+        "name":        "dp_register_solver",
+        "description": "Inject a custom physics solver or analysis function into the framework. It will run automatically on every dp_update call after the built-in solvers. The solver receives the full structural params dict and full current state dict, and returns a dict of new derived quantities.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type":        "string",
+              "description": "Unique solver name, e.g. 'plant_available_water'."
+            },
+            "description": {
+              "type":        "string",
+              "description": "Human-readable description of what this solver computes."
+            },
+            "python_code": {
+              "type":        "string",
+              "description": "Python source code of the solver function. Must define a function named exactly 'fn' with signature: def fn(params: dict, state: dict) -> dict. May use only Python stdlib."
+            },
+            "inputs": {
+              "type":        "array",
+              "items":       { "type": "string" },
+              "description": "List of param/state keys this solver reads, e.g. ['volumetric_water_content', 'clay_pct']."
+            },
+            "outputs": {
+              "type":        "array",
+              "items":       { "type": "string" },
+              "description": "List of keys this solver adds to the derived state, e.g. ['plant_available_water_fraction']."
+            }
+          },
+          "required": ["name", "python_code"]
+        }
+      }
+    },
+
+    {
+      "type": "function",
+      "function": {
+        "name":        "dp_list_canonical_properties",
+        "description": "Return the full list of canonical DP property names with their SI units, GLOSIS URIs, accepted aliases, and valid ranges. Use this when you need to know the correct canonical_key to use in a sensor manifest field declaration.",
+        "parameters": {
+          "type":       "object",
+          "properties": {
+            "filter_origin": {
+              "type":        "string",
+              "enum":        ["in_situ", "remote_sensing", "manual", "derived", "all"],
+              "description": "Filter by data origin. Default: 'all'."
+            }
+          }
+        }
+      }
+    },
+
+    {
+      "type": "function",
+      "function": {
+        "name":        "dp_export_jsonld",
+        "description": "Export the current snapshot of the pedon as a JSON-LD document annotated with GLOSIS URIs and SI units. Suitable for submission to FAO GLOSIS, ESDAC, WoSIS, or any OGC-compliant soil information system.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "pedon_id": {
+              "type":        "string",
+              "description": "The pedon_id to export."
+            },
+            "include_history": {
+              "type":        "boolean",
+              "description": "If true, include the full time-series history for all horizons in the export. Default: false."
+            }
+          },
+          "required": ["pedon_id"]
+        }
+      }
+    },
+
+    {
+      "type": "function",
+      "function": {
+        "name":        "dp_describe",
+        "description": "Return a structured natural-language + JSON description of the current state of a pedon, suitable for an LLM to interpret. Includes current water status (dry/moist/wet/saturated), active alarms, flux direction interpretation (draining/waterlogged/stable), and a plain-English summary of each horizon.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "pedon_id": {
+              "type":        "string",
+              "description": "The pedon_id to describe."
+            }
+          },
+          "required": ["pedon_id"]
+        }
+      }
+    }
+
+  ],
+
+  "dp:dispatcher_note": {
+    "dp:description": "To connect this schema to a live Python DigitalPedon instance, use the dp_agent.py dispatcher included in this repository. It maintains a session registry (pedon_id → DigitalPedon instance), receives LLM tool calls as JSON, executes the corresponding method, and returns the result as JSON.",
+    "dp:agent_pattern": {
+      "step_1": "Load dp_llm_context.json as the LLM system prompt.",
+      "step_2": "Pass dp_tools.json 'tools' array to the LLM API.",
+      "step_3": "On tool_use message: parse tool_name + tool_input JSON.",
+      "step_4": "Dispatch to dp_agent.py run(tool_name, tool_input).",
+      "step_5": "Return result JSON as tool_result to the LLM.",
+      "step_6": "LLM synthesises a natural-language answer from the result."
+    }
+  }
+}

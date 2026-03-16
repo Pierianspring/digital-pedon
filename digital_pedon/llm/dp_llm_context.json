@@ -1,0 +1,346 @@
+{
+  "@context": {
+    "@vocab":   "https://schema.org/",
+    "dp":       "https://github.com/digitalpedon/framework/ontology#",
+    "glosis":   "http://w3id.org/glosis/model/codelists#",
+    "xsd":      "http://www.w3.org/2001/XMLSchema#",
+    "skos":     "http://www.w3.org/2004/02/skos/core#",
+    "qudt":     "http://qudt.org/schema/qudt/",
+    "unit":     "http://qudt.org/vocab/unit/"
+  },
+
+  "@type": "dp:DigitalPedonFramework",
+  "dp:version":      "2.0",
+  "dp:authors":      ["Badreldin, Nasem", "Youssef, Ali"],
+  "dp:year":         2026,
+  "dp:license":      "CC BY 4.0",
+  "dp:repository":   "https://github.com/digitalpedon/framework",
+  "dp:cite_as":      "Badreldin, N. & Youssef, A. (2026). Digital Pedon: A Digital Twin Framework for Soil Profile Monitoring, Physics-Based Inference, and Global Interoperability. Version 2.0. CC BY 4.0.",
+
+  "dp:description": "Digital Pedon (DP) is a dictionary-first, stdlib-only Python framework that implements a three-layer digital twin for soil profiles. It ingests sensor and remote sensing data, runs physics-based solvers (Van Genuchten, Darcy-Buckingham, heat equation, Q10 respiration), fires threshold events, and stores a time-series history — all operating on plain Python dicts with no external dependencies.",
+
+  "dp:architecture": {
+    "dp:layer_structural": {
+      "dp:name":        "Structural Layer",
+      "dp:mutability":  "immutable",
+      "dp:populated":   "once, at build_pedon() call",
+      "dp:contents":    ["soil horizon geometry", "Van Genuchten parameters", "texture", "bulk density", "organic carbon", "thresholds", "site metadata"],
+      "dp:description": "The immutable skeleton of the pedon. Contains everything that does not change between sensor readings. Populated from config dict, YAML, or SoilGrids fetch."
+    },
+    "dp:layer_dynamic": {
+      "dp:name":        "Dynamic Layer",
+      "dp:mutability":  "mutable, thread-safe (asyncio.Lock)",
+      "dp:contents": {
+        "dp:kv_store":        "Current live state per horizon (overwritten on each update)",
+        "dp:timeseries_log":  "Append-only history of all raw readings",
+        "dp:event_system":    "Five threshold alarms: saturation, wilting_point, high_temp, low_temp, high_ec"
+      },
+      "dp:description": "The live state machine. Every call to update() writes to the KV store, appends to the log, and checks all five threshold conditions."
+    },
+    "dp:layer_functional": {
+      "dp:name":        "Functional Layer",
+      "dp:mutability":  "extensible — any solver can be injected at runtime",
+      "dp:built_in_solvers": [
+        {
+          "dp:name":        "van_genuchten",
+          "dp:description": "Van Genuchten (1980) unsaturated flow model",
+          "dp:inputs":      ["volumetric_water_content", "theta_r", "theta_s", "alpha_vg", "n_vg", "Ks_cm_day"],
+          "dp:outputs":     ["matric_potential_cm", "effective_saturation", "rel_hydraulic_conductivity", "hydraulic_conductivity_cm_day"],
+          "dp:reference":   "Van Genuchten, M.T. (1980). Soil Sci. Soc. Am. J., 44(5):892–898."
+        },
+        {
+          "dp:name":        "darcy_buckingham",
+          "dp:description": "Darcy-Buckingham vertical water flux between adjacent horizons",
+          "dp:inputs":      ["matric_potential_cm (upper+lower)", "hydraulic_conductivity_cm_day (upper+lower)", "dz_cm"],
+          "dp:outputs":     ["flux_down_cm_day"],
+          "dp:sign_convention": "negative = downward drainage, positive = upward (waterlogging signal)"
+        },
+        {
+          "dp:name":        "heat_equation",
+          "dp:description": "De Vries (1963) soil thermal properties model",
+          "dp:inputs":      ["volumetric_water_content", "bulk_density_g_cm3", "clay_pct", "organic_carbon_pct"],
+          "dp:outputs":     ["thermal_diffusivity_cm2_day", "heat_capacity_J_cm3_K"]
+        },
+        {
+          "dp:name":        "carbon_flux_Q10",
+          "dp:description": "Q10 temperature sensitivity model for soil CO2 respiration",
+          "dp:inputs":      ["soil_temperature_c", "volumetric_water_content", "organic_carbon_pct", "theta_s"],
+          "dp:outputs":     ["soil_respiration_mg_C_cm3_day"],
+          "dp:q10_value":   2.0
+        }
+      ],
+      "dp:custom_solver_signature": "def my_solver(params: dict, state: dict) -> dict",
+      "dp:custom_solver_note":      "Any function matching the signature can be injected via register_method(). It receives the full structural params dict and full dynamic state dict, and must return a dict of new derived quantities."
+    }
+  },
+
+  "dp:sensor_layer": {
+    "dp:name":        "Sensor Layer (BYOD)",
+    "dp:version":     "2.0",
+    "dp:description": "Bring-Your-Own-Data input gateway. Users declare sensor fields in a manifest (YAML, JSON, or Python dict). The layer validates, converts units to SI, and renames all keys to canonical DP vocabulary before passing to the pedon.",
+    "dp:data_origins": ["in_situ", "remote_sensing", "manual"],
+    "dp:manifest_formats": ["YAML", "JSON", "Python dict"],
+    "dp:unit_conversions_supported": [
+      "% → cm3/cm3 (water content)",
+      "degF → degC (temperature)",
+      "K → degC (temperature)",
+      "kPa → cm H2O (matric potential)",
+      "hPa → cm H2O",
+      "bar → cm H2O",
+      "pF → cm H2O",
+      "MPa → cm H2O",
+      "μS/cm → dS/m (EC)",
+      "mS/m → dS/m (EC)",
+      "DN → reflectance (Sentinel-2 L2A scale factor /10000)"
+    ]
+  },
+
+  "dp:canonical_properties": [
+    {
+      "dp:key":         "volumetric_water_content",
+      "dp:si_unit":     "cm3/cm3",
+      "glosis:uri":     "http://w3id.org/glosis/model/codelists#VolumetricWaterContent",
+      "dp:aliases":     ["theta", "vwc", "VWC", "soil_moisture", "swc"],
+      "dp:valid_range": [0.0, 0.95],
+      "dp:data_origin": ["in_situ", "remote_sensing", "manual"],
+      "dp:description": "Volumetric soil water content — cm3 of water per cm3 of bulk soil"
+    },
+    {
+      "dp:key":         "matric_potential_cm",
+      "dp:si_unit":     "cm_H2O",
+      "glosis:uri":     "http://w3id.org/glosis/model/codelists#SoilWaterPotential",
+      "dp:aliases":     ["psi", "matric_potential", "suction_cm"],
+      "dp:valid_range": [-1000000.0, 0.0],
+      "dp:description": "Soil matric potential — always negative; -15000 cm = permanent wilting point"
+    },
+    {
+      "dp:key":         "soil_temperature_c",
+      "dp:si_unit":     "degC",
+      "glosis:uri":     "http://w3id.org/glosis/model/codelists#SoilTemperature",
+      "dp:aliases":     ["temperature_c", "temp_c", "soil_temp", "T_soil"],
+      "dp:valid_range": [-30.0, 80.0],
+      "dp:data_origin": ["in_situ", "remote_sensing", "manual"]
+    },
+    {
+      "dp:key":         "electrical_conductivity_ds_m",
+      "dp:si_unit":     "dS/m",
+      "glosis:uri":     "http://w3id.org/glosis/model/codelists#ElectricalConductivity",
+      "dp:aliases":     ["ec_ds_m", "EC", "ec", "ECe"],
+      "dp:valid_range": [0.0, 200.0],
+      "dp:description": "Bulk soil electrical conductivity — proxy for salinity"
+    },
+    {
+      "dp:key":         "flux_down_cm_day",
+      "dp:si_unit":     "cm/day",
+      "dp:description": "Darcy-Buckingham vertical water flux — negative = downward drainage, positive = upward capillary rise or waterlogging",
+      "dp:derived":     true,
+      "dp:computed_by": "darcy_buckingham"
+    },
+    {
+      "dp:key":         "hydraulic_conductivity_cm_day",
+      "dp:si_unit":     "cm/day",
+      "glosis:uri":     "http://w3id.org/glosis/model/codelists#HydraulicConductivity",
+      "dp:derived":     true,
+      "dp:computed_by": "van_genuchten"
+    },
+    {
+      "dp:key":         "effective_saturation",
+      "dp:si_unit":     "dimensionless",
+      "dp:valid_range": [0.0, 1.0],
+      "dp:derived":     true,
+      "dp:computed_by": "van_genuchten",
+      "dp:description": "Normalised water content (Se). 0 = residual, 1 = saturated"
+    },
+    {
+      "dp:key":         "soil_respiration_mg_C_cm3_day",
+      "dp:si_unit":     "mg_C/(cm3·day)",
+      "dp:derived":     true,
+      "dp:computed_by": "carbon_flux_Q10",
+      "dp:description": "Soil CO2 respiration flux from organic matter decomposition"
+    },
+    {
+      "dp:key":         "thermal_diffusivity_cm2_day",
+      "dp:si_unit":     "cm2/day",
+      "dp:derived":     true,
+      "dp:computed_by": "heat_equation"
+    },
+    {
+      "dp:key":         "ndvi",
+      "dp:si_unit":     "dimensionless",
+      "glosis:uri":     "http://w3id.org/glosis/model/codelists#NDVI",
+      "dp:valid_range": [-1.0, 1.0],
+      "dp:data_origin": ["remote_sensing"],
+      "dp:description": "Normalised Difference Vegetation Index — user supplies extracted pixel value"
+    },
+    {
+      "dp:key":         "land_surface_temperature_c",
+      "dp:si_unit":     "degC",
+      "glosis:uri":     "http://w3id.org/glosis/model/codelists#LandSurfaceTemperature",
+      "dp:data_origin": ["remote_sensing"],
+      "dp:description": "Land surface temperature from thermal remote sensing"
+    },
+    {
+      "dp:key":         "soil_moisture_index",
+      "dp:si_unit":     "dimensionless",
+      "dp:valid_range": [0.0, 1.0],
+      "dp:data_origin": ["remote_sensing"],
+      "dp:description": "Remote sensing soil moisture index (e.g. from Sentinel-1 SAR)"
+    }
+  ],
+
+  "dp:threshold_events": {
+    "dp:description": "Five alarm conditions checked on every update(). When crossed, all registered event handlers are called with (horizon_id, event_name, state_dict).",
+    "dp:events": [
+      { "dp:name": "saturation",    "dp:condition": "volumetric_water_content >= theta_saturation",  "dp:default_threshold": 0.44 },
+      { "dp:name": "wilting_point", "dp:condition": "volumetric_water_content <= theta_wilting_pt",  "dp:default_threshold": 0.10 },
+      { "dp:name": "high_temp",     "dp:condition": "soil_temperature_c >= temp_high_c",             "dp:default_threshold": 35.0 },
+      { "dp:name": "low_temp",      "dp:condition": "soil_temperature_c <= temp_low_c",              "dp:default_threshold": 2.0  },
+      { "dp:name": "high_ec",       "dp:condition": "electrical_conductivity_ds_m >= ec_high_ds_m",  "dp:default_threshold": 4.0  }
+    ]
+  },
+
+  "dp:public_api": {
+    "dp:note": "All methods accept and return plain Python dicts. No OOP knowledge required.",
+    "dp:methods": [
+      {
+        "dp:name":        "build_pedon",
+        "dp:type":        "function",
+        "dp:module":      "pedon_api",
+        "dp:description": "Build and return a DigitalPedon instance from a config dict.",
+        "dp:input":       {
+          "site_name":  "str — field site name",
+          "pedon_id":   "str — optional unique ID (auto-generated if absent)",
+          "latitude":   "float — WGS84 decimal degrees",
+          "longitude":  "float — WGS84 decimal degrees",
+          "thresholds": "dict — optional, overrides _THRESHOLD_DEFAULTS",
+          "horizons":   "list[dict] — required, one dict per horizon"
+        },
+        "dp:output": "DigitalPedon instance",
+        "dp:example": "pedon = build_pedon({'site_name':'My Site','horizons':[...]})"
+      },
+      {
+        "dp:name":        "update_sync",
+        "dp:type":        "method on DigitalPedon",
+        "dp:description": "Synchronous: ingest one normalised reading dict and run all solvers. Returns updated horizon state dict.",
+        "dp:input":  {
+          "horizon_id":               "str — must match a horizon in this pedon",
+          "volumetric_water_content": "float — cm3/cm3",
+          "soil_temperature_c":       "float — °C",
+          "electrical_conductivity_ds_m": "float — dS/m (optional)",
+          "timestamp":                "float — Unix epoch (auto-set if absent)"
+        },
+        "dp:output": {
+          "horizon_id":               "str",
+          "volumetric_water_content": "float — cm3/cm3",
+          "soil_temperature_c":       "float — °C",
+          "matric_potential_cm":      "float — cm H2O",
+          "effective_saturation":     "float — dimensionless",
+          "hydraulic_conductivity_cm_day": "float — cm/day",
+          "flux_down_cm_day":         "float — cm/day (+ = upward)",
+          "soil_respiration_mg_C_cm3_day": "float",
+          "thermal_diffusivity_cm2_day":   "float",
+          "derived":                  "dict — all custom solver outputs"
+        },
+        "dp:example": "result = pedon.update_sync({'horizon_id':'Ap','volumetric_water_content':0.31,'soil_temperature_c':14.2})"
+      },
+      {
+        "dp:name":        "snapshot",
+        "dp:type":        "method on DigitalPedon",
+        "dp:description": "Return the full current state of every horizon as a nested dict.",
+        "dp:input":       "none",
+        "dp:output":      "dict with pedon_id, site_name, latitude, longitude, timestamp, horizons[]"
+      },
+      {
+        "dp:name":        "query_history",
+        "dp:type":        "method on DigitalPedon",
+        "dp:description": "Return time-series history for one horizon as a list of dicts.",
+        "dp:input":  {
+          "horizon_id": "str",
+          "since":      "float — Unix timestamp, optional",
+          "until":      "float — Unix timestamp, optional",
+          "limit":      "int — max records (0 = all)"
+        },
+        "dp:output": "list[dict] — each dict has timestamp, volumetric_water_content, soil_temperature_c, electrical_conductivity_ds_m"
+      },
+      {
+        "dp:name":        "register_method",
+        "dp:type":        "function",
+        "dp:module":      "pedon_api",
+        "dp:description": "Inject a custom solver function into the framework. It runs on every update() after the built-in solvers.",
+        "dp:input":  {
+          "name":        "str — unique solver name",
+          "fn":          "callable — def my_solver(params: dict, state: dict) -> dict",
+          "description": "str — optional",
+          "inputs":      "list[str] — keys your solver reads from params/state",
+          "outputs":     "list[str] — keys your solver returns"
+        }
+      },
+      {
+        "dp:name":        "register_event_handler",
+        "dp:type":        "method on DigitalPedon",
+        "dp:description": "Register a callback triggered when a threshold is crossed.",
+        "dp:input":       "callable — def handler(horizon_id: str, event_name: str, state: dict) -> None",
+        "dp:event_names": ["saturation", "wilting_point", "high_temp", "low_temp", "high_ec"]
+      },
+      {
+        "dp:name":        "SensorLayer.ingest",
+        "dp:type":        "method on SensorLayer",
+        "dp:module":      "sensor_layer",
+        "dp:description": "Ingest one raw reading dict. Validates, converts units, renames keys. Returns normalised dict ready for update_sync().",
+        "dp:input":       "dict — raw keys in any unit declared in the manifest",
+        "dp:output":      "dict — canonical keys, SI units, horizon_id, timestamp"
+      },
+      {
+        "dp:name":        "SensorLayer.split_by_horizon",
+        "dp:type":        "method on SensorLayer",
+        "dp:module":      "sensor_layer",
+        "dp:description": "When one raw row contains fields from multiple horizons, split into one dict per horizon. Typical for multi-depth CSV loggers.",
+        "dp:input":       "dict — raw multi-horizon row",
+        "dp:output":      "list[dict] — one normalised dict per horizon_id"
+      },
+      {
+        "dp:name":        "SensorManifest.from_yaml",
+        "dp:type":        "classmethod on SensorManifest",
+        "dp:module":      "sensor_layer",
+        "dp:description": "Load a sensor manifest from a YAML file (requires PyYAML).",
+        "dp:input":       "str — path to YAML file",
+        "dp:output":      "SensorManifest instance"
+      },
+      {
+        "dp:name":        "register_soil_type",
+        "dp:type":        "function",
+        "dp:module":      "pedon_api",
+        "dp:description": "Add a custom soil type to the global registry. It can then be referenced by name in any horizon config.",
+        "dp:required_keys": ["name", "clay_pct", "silt_pct", "sand_pct", "theta_r", "theta_s", "alpha_vg", "n_vg", "Ks_cm_day"]
+      },
+      {
+        "dp:name":        "to_json",
+        "dp:type":        "method on DigitalPedon",
+        "dp:description": "Serialise the current snapshot to a JSON string (GLOSIS-annotated).",
+        "dp:output":      "str — JSON"
+      }
+    ]
+  },
+
+  "dp:llm_usage_notes": {
+    "dp:purpose": "This manifest is designed to be injected as system context for any LLM assistant. After reading it, the LLM can: answer questions about the DP schema, generate correct Python code using the framework, interpret snapshot outputs, suggest appropriate threshold values, and call DP methods as tool calls (see dp_tools.json).",
+    "dp:workflow_summary": [
+      "1. Describe soil horizons in a config dict.",
+      "2. Call build_pedon(config) to create the digital twin.",
+      "3. Optionally declare sensor fields in a SensorManifest (YAML or dict).",
+      "4. Create a SensorLayer(manifest) to normalise incoming data.",
+      "5. For each sensor reading: call layer.ingest(raw) then pedon.update_sync(reading).",
+      "6. Call pedon.snapshot() to inspect current state.",
+      "7. Call pedon.query_history(horizon_id) to retrieve the time-series log.",
+      "8. Export to JSON-LD with pedon.to_json() for publication."
+    ],
+    "dp:common_patterns": {
+      "dp:single_reading":        "result = pedon.update_sync({'horizon_id':'Ap','volumetric_water_content':0.31,'soil_temperature_c':14.2})",
+      "dp:csv_batch":             "for row in csv.DictReader(f): pedon.update_sync(layer.ingest_csv_row(row))",
+      "dp:multi_horizon_csv":     "for row in csv.DictReader(f): [pedon.update_sync(r) for r in layer.split_by_horizon(layer.ingest_csv_row(row))]",
+      "dp:custom_solver":         "register_method({'name':'my_model','fn':my_fn,'inputs':['theta'],'outputs':['my_output']})",
+      "dp:alarm":                 "pedon.register_event_handler(lambda hid,ev,st: print(f'ALARM {ev} on {hid}'))",
+      "dp:export":                "json.loads(pedon.to_json())"
+    }
+  }
+}
