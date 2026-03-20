@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use Digital Pedon in your research, please cite it as below."
 type: software
-title: "Digital Pedon: A Digital Twin Framework for Soil Profile Monitoring, Physics-Based Inference, and Global Interoperability"
+title: "Digital Pedon: A Digital Twin Framework for Soil Profile Monitoring and Global Interoperability"
 version: "2.0"
 date-released: "2026-01-01"
 license: CC-BY-4.0
@@ -38,11 +38,11 @@ abstract: >
 preferred-citation:
   type: software
   authors:
-    - family-names: Badreldin
-      given-names: Nasem
     - family-names: Youssef
       given-names: Ali
-  title: "Digital Pedon: A Digital Twin Framework for Soil Profile Monitoring, Physics-Based Inference, and Global Interoperability"
+    - family-names: Badreldin
+      given-names: Nasem
+  title: "Digital Pedon: A Digital Twin Framework for Soil Profile Monitoring and Global Interoperability"
   year: 2026
   version: "2.0"
   license: CC-BY-4.0
