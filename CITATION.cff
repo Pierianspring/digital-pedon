@@ -8,11 +8,11 @@ license: CC-BY-4.0
 repository-code: "https://github.com/digitalpedon/framework"
 url: "https://github.com/digitalpedon/framework"
 authors:
-  - family-names: Badreldin
-    given-names: Nasem
-    orcid: "https://orcid.org/0000-0000-0000-0000"
   - family-names: Youssef
     given-names: Ali
+    orcid: "https://orcid.org/0000-0002-9986-5324"
+  - family-names: Badreldin
+    given-names: Nasem
     orcid: "https://orcid.org/0000-0000-0000-0001"
 keywords:
   - soil science
