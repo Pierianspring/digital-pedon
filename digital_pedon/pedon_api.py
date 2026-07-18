@@ -690,10 +690,21 @@ class DigitalPedon:
         return resolved
 
     def get_horizon_state(self, horizon_id: str) -> dict[str, Any]:
-        """Return a copy of the current state dict for one horizon.
+        """Return a flattened copy of the current state dict for one horizon.
+        Derived solver outputs (e.g. hydraulic_conductivity_cm_day,
+        matric_potential_cm) are merged into the top-level dict so callers
+        can access them directly without nesting into state['derived'].
         Accepts either the UUID horizon_id or the FAO designation (e.g. 'Ap')."""
         hid = self._resolve_hid(horizon_id)
-        return copy.deepcopy(self._state[hid])
+        raw = copy.deepcopy(self._state[hid])
+        # Flatten derived solver outputs into the top-level dict so callers
+        # can access e.g. result["hydraulic_conductivity_cm_day"] directly.
+        # The nested result["derived"] dict is also preserved for backward
+        # compatibility with code that accesses it explicitly.
+        # Top-level structural keys (theta, temperature_c, etc.) win over
+        # any derived key with the same name.
+        derived = raw.get("derived", {})
+        return {**derived, **raw}
 
     def query_history(
         self,
